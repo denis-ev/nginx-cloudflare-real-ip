@@ -12,6 +12,23 @@ Open "/etc/nginx/nginx.conf" file with your favorite text editor and just add th
 include /etc/nginx/cloudflare;
 ```
 
+## Firewall Configuration (firewalld)
+
+```
+firewall-cmd --permanent --zone=public --add-interface={your main interface (eth0)}
+
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv4 port port=80 protocol=tcp accept'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv6 port port=80 protocol=tcp accept'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv4 port port=443 protocol=tcp accept'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv6 port port=443 protocol=tcp accept'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv4 invert="True" port port=80 protocol=tcp drop'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv6 invert="True" port port=80 protocol=tcp drop'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv4 invert="True" port port=443 protocol=tcp drop'
+firewall-cmd --permanent --zone=public --add-rich-rule='rule source ipset=cfv6 invert="True" port port=443 protocol=tcp drop'
+
+firewall-cmd --reload
+```
+
 The bash script may run manually or can be scheduled to refresh the ip list of CloudFlare automatically.
 ```sh
 #!/bin/bash
@@ -37,6 +54,21 @@ echo "real_ip_header CF-Connecting-IP;" >> $CLOUDFLARE_FILE_PATH;
 
 #test configuration and reload nginx
 nginx -t && systemctl reload nginx
+
+firewall-cmd --permanent --delete-ipset=cfv4
+firewall-cmd --permanent --delete-ipset=cfv6
+firewall-cmd --permanent --new-ipset=cfv4 --type=hash:net
+firewall-cmd --permanent --new-ipset=cfv6 --type=hash:net --option=family=inet6
+
+for cidr in $(curl https://www.cloudflare.com/ips-v4); do \
+    firewall-cmd --permanent --ipset=cfv4 --add-entry=$cidr; \
+done
+
+for cidr in $(curl https://www.cloudflare.com/ips-v6); do \
+    firewall-cmd --permanent --ipset=cfv6 --add-entry=$cidr; \
+done
+
+firewall-cmd --reload
 ```
 
 ## Output
@@ -104,4 +136,7 @@ You are responsible for reviewing and testing any scripts you run *thoroughly* b
 environment.
 
 Thanks,   
+[Denis Evers](https://evers.sh)
+
+Credits
 [Ergin BULUT](https://www.erginbulut.com)
